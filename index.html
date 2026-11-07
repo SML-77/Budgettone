@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- Budgettone · VERSIONE 07/11/2026 20:52 -->
 <html lang="it">
 <head>
 <meta charset="utf-8">
@@ -163,6 +164,7 @@ textarea{resize:vertical}
 .amt.trf{color:var(--ink-2)}
 .seg.three button{padding:7px 12px}
 .link-btn{border:0;background:none;color:var(--accent);font-weight:600;padding:2px 8px;min-height:32px;border-radius:10px}
+.ver{margin:0 0 8px;font-size:12px;color:var(--ink-2);text-align:right}
 .sec{display:flex;justify-content:space-between;align-items:baseline;margin:22px 0 4px;padding:9px 12px;border-radius:12px;font-weight:700;font-family:var(--f-display);font-size:17px}
 .sec.inc{background:var(--inc-soft);color:var(--inc)}
 .sec.exp{background:var(--exp-soft);color:var(--exp)}
@@ -175,6 +177,9 @@ textarea{resize:vertical}
 .sug button:last-child{border-bottom:0}
 .stack{display:grid;gap:8px;margin-top:14px}
 .two2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.prow{border:1px solid var(--line);border-radius:12px;padding:8px 10px;margin:6px 0;font-size:14px;line-height:1.35}
+.prow.bad{border-color:var(--exp);color:var(--exp)}
+.raw{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;word-break:break-all;color:var(--ink-2);background:var(--surface-2);border-radius:10px;padding:8px 10px;margin:6px 0}
 </style>
 </head>
 <body>
@@ -198,6 +203,7 @@ textarea{resize:vertical}
 </div></header>
 
 <main><div class="wrap">
+  <p class="ver" id="ver"></p>
   <div class="banner" id="banner" hidden>Questo browser non permette di salvare i dati. Esporta spesso un backup dal menu.</div>
   <div class="tabs" role="tablist">
     <button role="tab" id="tabSum" aria-selected="true">Riepilogo</button>
@@ -228,6 +234,7 @@ if('serviceWorker' in navigator){
 
 /* ---------- utilità ---------- */
 const KEY='spese.v1';
+const APP_VERSION='07/11/2026 20:52';
 const PALETTE=['#5B8DEF','#E8A33D','#E5604D','#3FB59A','#A66BD9','#E26CA5','#6BBF59','#4FB3D9','#D9825B','#8C9BAA','#C2B73C','#3C7A89','#B5546B','#7A6CD9'];
 const $=s=>document.querySelector(s);
 const pad=n=>String(n).padStart(2,'0');
@@ -247,22 +254,26 @@ function money(c,cur){
   }catch(e){return (c/100).toFixed(2).replace('.',',')+' '+cur;}
 }
 
-function parseAmount(s){
+function parseAmount(s,fmt){
   if(typeof s==='number')return s;
-  s=String(s==null?'':s).replace(/[^\d,.\-+]/g,'');
+  s=String(s==null?'':s).replace(/[\u2212\u2013]/g,'-').replace(/[^\d,.\-+]/g,'');
   if(!s)return NaN;
   const neg=s.charAt(0)==='-';
   s=s.replace(/[-+]/g,'');
-  const lc=s.lastIndexOf(','),ld=s.lastIndexOf('.');
-  if(lc>-1&&ld>-1){
-    const dec=lc>ld?',':'.',th=dec===','?'.':',';
-    s=s.split(th).join('').replace(dec,'.');
-  }else if(lc>-1){
-    const p=s.split(',');
-    s=(p.length===2&&p[1].length<=2)?p[0]+'.'+p[1]:p.join('');
-  }else if(ld>-1){
-    const p=s.split('.');
-    if(p.length>2||(p[1].length===3&&/^[1-9]\d{0,2}$/.test(p[0])))s=p.join('');
+  if(fmt==='it')s=s.split('.').join('').replace(',','.');
+  else if(fmt==='en')s=s.split(',').join('');
+  else{
+    const lc=s.lastIndexOf(','),ld=s.lastIndexOf('.');
+    if(lc>-1&&ld>-1){
+      const dec=lc>ld?',':'.',th=dec===','?'.':',';
+      s=s.split(th).join('').replace(dec,'.');
+    }else if(lc>-1){
+      const p=s.split(',');
+      s=(p.length===2&&p[1].length<=2)?p[0]+'.'+p[1]:p.join('');
+    }else if(ld>-1){
+      const p=s.split('.');
+      if(p.length>2||(p[1].length===3&&/^[1-9]\d{0,2}$/.test(p[0])))s=p.join('');
+    }
   }
   const v=parseFloat(s);
   return neg?-v:v;
@@ -356,7 +367,7 @@ function effect(t,ids){
   if(t.type==='exp')return ids.has(t.acc)?-t.amt:0;
   return (ids.has(t.acc)?-t.amt:0)+(ids.has(t.acc2)?(t.amt2||t.amt):0);
 }
-function accBalance(id){const ids=new Set([id]);let s=0;D.tx.forEach(t=>{s+=effect(t,ids);});return s;}
+function accBalance(id){const ids=new Set([id]),today=iso(new Date());let s=0;D.tx.forEach(t=>{if(t.date<=today)s+=effect(t,ids);});return s;}
 
 const UNITS={d:['giorno','giorni'],w:['settimana','settimane'],m:['mese','mesi'],y:['anno','anni']};
 function recLabel(r){
@@ -464,17 +475,19 @@ function renderSummary(){
 }
 function txRow(t,ids,cur){
   const a=AM.get(t.acc);
-  const rm=(t.rid&&D.rec.some(r=>r.id===t.rid))?'↻ ':'';
+  const flags=[];
+  if(t.date>iso(new Date()))flags.push('⏳ programmato');
+  if(t.rid&&D.rec.some(r=>r.id===t.rid))flags.push('↻');
   if(t.type==='trf'){
     const b=AM.get(t.acc2),e=effect(t,ids);
     let amtTxt,cls='trf';
     if(ids.size===1){amtTxt=(e>0?'+':'−')+money(Math.abs(e),cur);cls=e>0?'inc':'exp';}
     else amtTxt=money(t.amt,a?a.cur:cur);
-    const sub=(rm+(t.note?'Trasferimento · ':'')+(a?a.name:'?')+' → '+(b?b.name:'?')).trim();
+    const sub=flags.concat([t.note?'Trasferimento':'',(a?a.name:'?')+' → '+(b?b.name:'?')]).filter(Boolean).join(' · ');
     return '<button class="row" data-tx="'+esc(t.id)+'"><span class="ico" style="--c:#8C9BAA">⇄</span><span class="grow"><b>'+esc(t.note||'Trasferimento')+'</b><small>'+esc(sub)+'</small></span><span class="amt '+cls+'">'+esc(amtTxt)+'</span></button>';
   }
   const c=CM.get(t.cat)||{name:'Senza categoria',icon:'?',color:'#8C9BAA'};
-  const sub=(rm+[t.note?c.name:'',D.sel==='all'&&D.accounts.length>1&&a?a.name:''].filter(Boolean).join(' · ')).trim();
+  const sub=flags.concat([t.note?c.name:'',D.sel==='all'&&D.accounts.length>1&&a?a.name:'']).filter(Boolean).join(' · ');
   return '<button class="row" data-tx="'+esc(t.id)+'"><span class="ico" style="--c:'+esc(c.color)+'">'+esc(c.icon)+'</span><span class="grow"><b>'+esc(t.note||c.name)+'</b>'+(sub?'<small>'+esc(sub)+'</small>':'')+'</span><span class="amt '+t.type+'">'+(t.type==='exp'?'−':'+')+esc(money(t.amt,a?a.cur:cur))+'</span></button>';
 }
 function renderList(){
@@ -762,6 +775,7 @@ function accForm(acc,after){
   openSheet(acc?'Modifica conto':'Nuovo conto',
     '<label class="fld"><span>Nome</span><input id="aName" maxlength="40" autocomplete="off"></label>'+
     '<label class="fld"><span>Valuta (codice di tre lettere, per esempio EUR)</span><input id="aCur" maxlength="3" autocapitalize="characters" autocomplete="off"></label>'+
+    (acc?'<div class="fld"><span class="lbl">Saldo attuale oggi (per calcolare quello di partenza)</span><div style="display:grid;grid-template-columns:1fr auto;gap:8px"><input id="aNow" inputmode="decimal" autocomplete="off" placeholder="0,00" aria-label="Saldo attuale"><button type="button" class="btn" id="aCalc" style="flex:none">Calcola</button></div></div>':'')+
     '<label class="fld"><span>Saldo di partenza (facoltativo)</span><input id="aOpen" inputmode="decimal" autocomplete="off" placeholder="0,00"></label>'+
     '<label class="fld"><span>Data di partenza</span><input id="aOpenDate" type="date"></label>'+
     '<p class="hint">Il saldo di partenza viene registrato come entrata alla data indicata (come uscita se è negativo).</p>'+
@@ -769,14 +783,31 @@ function accForm(acc,after){
     '<div class="actions">'+(acc&&D.accounts.length>1?'<button class="btn danger" id="aDel">Elimina</button>':'')+'<button class="btn primary" id="aSave">Salva</button></div>',
     (b,sc)=>{
       const q=s=>b.querySelector(s);
+      const fail=m=>{const err=q('#aErr');err.textContent=m;err.hidden=false;};
       q('#aName').value=acc?acc.name:'';
       q('#aCur').value=acc?acc.cur:(D.accounts[0]?D.accounts[0].cur:'EUR');
       q('#aOpen').value=ot?((ot.type==='inc'?ot.amt:-ot.amt)/100).toFixed(2).replace('.',','):'';
       q('#aOpenDate').value=ot?ot.date:iso(new Date());
+      const calc=q('#aCalc');
+      if(calc)calc.onclick=()=>{
+        const v=parseAmount(q('#aNow').value);
+        if(!isFinite(v))return fail('Scrivi il saldo attuale del conto, per esempio 1250,00.');
+        const today=iso(new Date()),ids=new Set([acc.id]);
+        let others=0,first='';
+        D.tx.forEach(t=>{
+          if(t.opening&&t.acc===acc.id)return;
+          if(t.acc===acc.id||t.acc2===acc.id){if(!first||t.date<first)first=t.date;}
+          if(t.date<=today)others+=effect(t,ids);
+        });
+        const open=Math.round(v*100)-others;
+        const f=first?fromIso(first):new Date();
+        q('#aOpen').value=(open/100).toFixed(2).replace('.',',');
+        q('#aOpenDate').value=first?iso(new Date(f.getFullYear(),f.getMonth(),f.getDate()-1)):today;
+        q('#aErr').hidden=true;
+        toast('Saldo di partenza calcolato: ora premi Salva');
+      };
       q('#aSave').onclick=()=>{
         const name=q('#aName').value.trim(),cur=q('#aCur').value.trim().toUpperCase();
-        const err=q('#aErr');
-        const fail=m=>{err.textContent=m;err.hidden=false;};
         if(!name)return fail('Scrivi un nome per il conto.');
         if(!/^[A-Z]{3}$/.test(cur))return fail('La valuta deve avere tre lettere, per esempio EUR.');
         if(D.accounts.some(a=>a!==acc&&a.name.toLowerCase()===name.toLowerCase()))return fail('Esiste già un conto con questo nome.');
@@ -1062,55 +1093,128 @@ function parseDateFlex(s,order){
 const ICONS=[[/spes|grocer|aliment|super/,'🛒'],[/rist|cibo|pran|cena|food|bar\b/,'🍽️'],[/cas[ae]|affitt|mutuo|home/,'🏠'],[/auto|car\b|benz|carbur/,'🚗'],[/trasp|treno|bus\b|metro|taxi/,'🚆'],[/salut|medic|farm|dent/,'🩺'],[/sport|palestra|gym/,'💪'],[/viagg|vacanz|travel/,'🌴'],[/regal|gift/,'🎁'],[/vestit|abbigl|cloth/,'👕'],[/intratt|cinema|svago|film/,'🎬'],[/comput|tech|elettr/,'💻'],[/risparm|salvad|invest/,'🐷'],[/bollet|fattur|util|luce|gas\b|telef|comunic/,'🧾'],[/stipend|salary|lavoro/,'💼'],[/bimb|figl|baby|kid/,'🧸'],[/occhial|ottic/,'👓']];
 function guessIcon(name){const n=name.toLowerCase();for(const p of ICONS)if(p[0].test(n))return p[1];return '🏷️';}
 
-function importCsv(text){
+function csvAnalyze(text){
   const rows=parseCsv(text);
+  const first=rows[0]||[];
+  if(first.length>=4&&/^\d{1,4}[-\/.]\d{1,2}[-\/.]\d{1,4}/.test(String(first[0]||'').trim())){
+    const names=['date','account','category','amount','currency','converted amount','currency2','description'];
+    rows.unshift(first.map((_,i)=>names[i]||('col'+(i+1))));
+  }
   if(rows.length<2)throw new Error('Il file non contiene righe da importare.');
-  const head=rows[0].map(h=>h.replace(/^\ufeff/,'').trim().toLowerCase());
-  const find=names=>head.findIndex(h=>names.indexOf(h)>-1);
-  const iDate=find(['date','data']),iAcc=find(['account','conto']),iCat=find(['category','categoria']),
-        iAmt=find(['amount','importo']),iCur=find(['currency','valuta']),iDesc=find(['description','descrizione','note','nota']);
-  if(iDate<0||iCat<0||iAmt<0)throw new Error('Non riconosco le colonne del file. Servono almeno data, categoria e importo. Trovate: '+rows[0].join(', ')+'.');
-  let order='dmy';
+  const head=rows[0].map(h=>h.replace(/^\ufeff/,'').trim());
+  const low=head.map(h=>h.toLowerCase());
+  const find=names=>low.findIndex(h=>names.indexOf(h)>-1);
+  const map={date:find(['date','data']),acc:find(['account','conto']),cat:find(['category','categoria']),
+    amt:find(['amount','importo']),cur:find(['currency','valuta']),desc:find(['description','descrizione','note','nota'])};
+  return {rows:rows,head:head,map:map};
+}
+function guessOrder(rows,iDate){
+  if(iDate<0)return 'dmy';
   for(let i=1;i<rows.length;i++){
     const m=String(rows[i][iDate]||'').match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.]\d{2,4}/);
-    if(m){if(+m[1]>12){order='dmy';break;}if(+m[2]>12){order='mdy';break;}}
+    if(m){if(+m[1]>12)return 'dmy';if(+m[2]>12)return 'mdy';}
   }
-  const existing=new Map();
+  return 'dmy';
+}
+function interpretRow(r,map,opt){
+  if(map.date<0||map.amt<0)return null;
+  const date=parseDateFlex(r[map.date],opt.order),v=parseAmount(r[map.amt],opt.fmt);
+  if(!date||!isFinite(v)||v===0)return null;
+  let catName=map.cat>-1?String(r[map.cat]||'').trim():'';
+  if(!catName)catName='Senza categoria';
+  return {date:date,type:v<0?'exp':'inc',amt:Math.round(Math.abs(v)*100),catName:catName,
+    accName:map.acc>-1?String(r[map.acc]||'').trim():'',
+    cur:map.cur>-1?String(r[map.cur]||'').trim().toUpperCase():'',
+    note:map.desc>-1?String(r[map.desc]||'').trim():''};
+}
+function detectRecs(items,today){
+  const groups=new Map();
+  items.forEach(r=>{
+    const k=[r.accName.toLowerCase(),r.catName.toLowerCase(),r.type,r.amt,r.note.toLowerCase()].join('|');
+    if(!groups.has(k))groups.set(k,[]);
+    groups.get(k).push(r);
+  });
+  const out=[];
+  groups.forEach((list,key)=>{
+    if(list.length<2||!list.some(r=>r.date>today))return;
+    list.sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
+    const mi=r=>{const p=r.date.split('-');return (+p[0])*12+(+p[1])-1;};
+    const dom=r=>+r.date.split('-')[2];
+    const d0=mi(list[1])-mi(list[0]);
+    if([1,2,3,4,6,12].indexOf(d0)<0)return;
+    for(let i=1;i<list.length;i++)if(mi(list[i])-mi(list[i-1])!==d0)return;
+    const day=dom(list[0]);
+    if(list.some(r=>dom(r)!==day&&!(day>=28&&dom(r)>=28)))return;
+    out.push({key:key,first:list[0],every:d0,k:list.filter(r=>r.date<=today).length});
+  });
+  return out;
+}
+function importRows(an,map,opt){
+  const rows=an.rows,today=iso(new Date());
+  const items=[];let bad=0;
+  for(let i=1;i<rows.length;i++){const r=interpretRow(rows[i],map,opt);if(r)items.push(r);else bad++;}
+  const res={added:0,skipped:0,bad:bad,exp:0,inc:0,newAcc:0,newCat:0,future:0,recs:0};
+  if(!opt.acc&&map.acc>-1&&!D.tx.length&&!D.rec.length&&D.accounts.length===1&&D.accounts[0].name==='Conto principale'){
+    D.accounts=[];D.sel='all';idx();
+  }
+  const fixed=opt.acc?AM.get(opt.acc):null;
+  const defName=fixed?fixed.name:(D.sel!=='all'&&AM.has(D.sel)?AM.get(D.sel).name:(D.accounts[0]?D.accounts[0].name:'Conto principale'));
+  const defCur=fixed?fixed.cur:(D.accounts[0]?D.accounts[0].cur:'EUR');
   const keyOf=(date,acc,cat,type,amt,note)=>[date,acc.toLowerCase(),cat.toLowerCase(),type,amt,note.toLowerCase()].join('|');
+  const existing=new Map();
   D.tx.forEach(t=>{
+    if(t.type==='trf')return;
     const a=AM.get(t.acc),c=CM.get(t.cat);
     const k=keyOf(t.date,a?a.name:'',c?c.name:'',t.type,t.amt,t.note||'');
     existing.set(k,(existing.get(k)||0)+1);
   });
-  const res={added:0,skipped:0,bad:0,exp:0,inc:0,newAcc:0,newCat:0};
   const accByName=new Map(D.accounts.map(a=>[a.name.toLowerCase(),a]));
   const catByKey=new Map(D.cats.map(c=>[c.type+'|'+c.name.toLowerCase(),c]));
-  const defAcc=D.sel!=='all'&&AM.has(D.sel)?AM.get(D.sel):D.accounts[0];
+  const getAcc=(name,cur)=>{
+    if(fixed)return fixed;
+    name=name||defName;
+    let a=accByName.get(name.toLowerCase());
+    if(!a){a={id:uid(),name:name,cur:/^[A-Z]{3}$/.test(cur)?cur:defCur};D.accounts.push(a);accByName.set(name.toLowerCase(),a);res.newAcc++;}
+    return a;
+  };
+  const getCat=(name,type)=>{
+    const ck=type+'|'+name.toLowerCase();
+    let c=catByKey.get(ck);
+    if(!c){c={id:uid(),name:name,icon:guessIcon(name),color:PALETTE[D.cats.length%PALETTE.length],type:type};D.cats.push(c);catByKey.set(ck,c);res.newCat++;}
+    return c;
+  };
+  const mode=opt.future||'rec';
+  const groups=mode==='rec'?detectRecs(items,today):[];
+  const gid=new Map();
+  groups.forEach(g=>{
+    gid.set(g.key,uid());
+    const f=g.first;
+    const a=accByName.get((fixed?fixed.name:(f.accName||defName)).toLowerCase());
+    const c=catByKey.get(f.type+'|'+f.catName.toLowerCase());
+    if(a&&c){
+      const ex=D.rec.find(x=>x.base.acc===a.id&&x.base.cat===c.id&&x.base.type===f.type&&x.base.amt===f.amt&&(x.base.note||'')===f.note);
+      if(ex){gid.set(g.key,ex.id);g.exists=true;}
+    }
+  });
   const added=[];
-  for(let i=1;i<rows.length;i++){
-    const r=rows[i];
-    const date=parseDateFlex(r[iDate],order),v=parseAmount(r[iAmt]),catName=String(r[iCat]||'').trim();
-    if(!date||!isFinite(v)||v===0||!catName){res.bad++;continue;}
-    const type=v<0?'exp':'inc',amt=Math.round(Math.abs(v)*100),note=String(iDesc>-1?r[iDesc]||'':'').trim();
-    const accName=iAcc>-1?String(r[iAcc]||'').trim():'';
-    const cur=iCur>-1?String(r[iCur]||'').trim().toUpperCase():'';
-    const accKey=(accName||defAcc.name).toLowerCase();
-    const k=keyOf(date,accName||defAcc.name,catName,type,amt,note);
-    if((existing.get(k)||0)>0){existing.set(k,existing.get(k)-1);res.skipped++;continue;}
-    let acc=accByName.get(accKey);
-    if(!acc){
-      acc={id:uid(),name:accName||defAcc.name,cur:/^[A-Z]{3}$/.test(cur)?cur:defAcc.cur};
-      D.accounts.push(acc);accByName.set(accKey,acc);res.newAcc++;
-    }
-    const ck=type+'|'+catName.toLowerCase();
-    let cat=catByKey.get(ck);
-    if(!cat){
-      cat={id:uid(),name:catName,icon:guessIcon(catName),color:PALETTE[D.cats.length%PALETTE.length],type:type};
-      D.cats.push(cat);catByKey.set(ck,cat);res.newCat++;
-    }
-    added.push({id:uid(),type:type,amt:amt,cat:cat.id,acc:acc.id,date:date,note:note});
-    res[type]++;res.added++;
-  }
+  items.forEach(r=>{
+    if(r.date>today&&mode!=='keep'){res.future++;return;}
+    const accName=fixed?fixed.name:(r.accName||defName);
+    const k=keyOf(r.date,accName,r.catName,r.type,r.amt,r.note);
+    if((existing.get(k)||0)>0){existing.set(k,existing.get(k)-1);res.skipped++;return;}
+    const acc=getAcc(r.accName,r.cur),cat=getCat(r.catName,r.type);
+    const tx={id:uid(),type:r.type,amt:r.amt,cat:cat.id,acc:acc.id,date:r.date,note:r.note};
+    const gk=[r.accName.toLowerCase(),r.catName.toLowerCase(),r.type,r.amt,r.note.toLowerCase()].join('|');
+    if(gid.has(gk)){tx.rid=gid.get(gk);tx.occ=r.date;}
+    added.push(tx);res[r.type]++;res.added++;
+  });
+  groups.forEach(g=>{
+    if(g.exists)return;
+    const f=g.first,acc=getAcc(f.accName,f.cur),cat=getCat(f.catName,f.type);
+    D.rec.push({id:gid.get(g.key),base:{type:f.type,amt:f.amt,cat:cat.id,acc:acc.id,note:f.note},start:f.date,every:g.every,unit:'m',end:'',k:g.k,stopped:false,finished:false});
+    res.recs++;
+  });
+  if(!D.accounts.length)D.accounts.push({id:uid(),name:'Conto principale',cur:'EUR'});
   D.tx=D.tx.concat(added);
   save();idx();
   return res;
@@ -1145,14 +1249,89 @@ function restoreJson(o){
   save();idx();
   return tx.length;
 }
+function renderImportPreview(an,box,out){
+  const map=an.map;
+  const colOpts=(sel,none)=>'<option value="-1"'+(sel<0?' selected':'')+'>'+none+'</option>'+an.head.map((h,i)=>'<option value="'+i+'"'+(i===sel?' selected':'')+'>'+(i+1)+'. '+esc(h||'(senza nome)')+'</option>').join('');
+  const fld=(id,label,sel,none)=>'<label class="fld"><span>'+label+'</span><select id="'+id+'">'+colOpts(sel,none)+'</select></label>';
+  box.innerHTML=
+    '<div class="res">Ho letto '+(an.rows.length-1)+' righe. Controlla l’anteprima e, se qualcosa non torna, cambia le colonne o i formati.</div>'+
+    fld('mDate','Colonna della data',map.date,'non trovata')+
+    fld('mAmt','Colonna dell’importo',map.amt,'non trovata')+
+    fld('mCat','Colonna della categoria',map.cat,'nessuna')+
+    fld('mAcc','Colonna del conto',map.acc,'nessuna')+
+    fld('mDesc','Colonna della descrizione',map.desc,'nessuna')+
+    fld('mCur','Colonna della valuta',map.cur,'nessuna')+
+    '<label class="fld"><span>Formato degli importi</span><select id="oFmt"><option value="auto">Automatico</option><option value="it">1.234,56 (virgola decimale)</option><option value="en">1,234.56 (punto decimale)</option></select></label>'+
+    '<label class="fld"><span>Formato delle date</span><select id="oOrd"><option value="auto">Automatico</option><option value="dmy">giorno/mese/anno</option><option value="mdy">mese/giorno/anno</option></select></label>'+
+    '<label class="fld"><span>Conto di destinazione</span><select id="oAcc"><option value="">Come nel file (crea i conti mancanti)</option>'+D.accounts.map(a=>'<option value="'+esc(a.id)+'">'+esc(a.name)+'</option>').join('')+'</select></label>'+
+    '<label class="fld" id="oFutBox" hidden><span>Movimenti con data futura</span><select id="oFut"><option value="rec">Trasformali in ricorrenze (consigliato)</option><option value="skip">Ignorali</option><option value="keep">Importali così come sono</option></select></label>'+
+    '<div id="iPv"></div>'+
+    '<div class="actions"><button class="btn primary" id="iDo">Importa</button></div>';
+  const q=s=>box.querySelector(s);
+  let cur=null;
+  function read(){
+    map.date=+q('#mDate').value;map.amt=+q('#mAmt').value;map.cat=+q('#mCat').value;
+    map.acc=+q('#mAcc').value;map.desc=+q('#mDesc').value;map.cur=+q('#mCur').value;
+    const ord=q('#oOrd').value;
+    cur={fmt:q('#oFmt').value,order:ord==='auto'?guessOrder(an.rows,map.date):ord,acc:q('#oAcc').value,future:q('#oFut').value};
+  }
+  function upd(){
+    read();
+    const today=iso(new Date());
+    const items=[];let bad=0;const cards=[];
+    for(let i=1;i<an.rows.length;i++){
+      const r=interpretRow(an.rows[i],map,cur);
+      if(r)items.push(r);else bad++;
+      if(i<=5){
+        if(r){
+          const c=/^[A-Z]{3}$/.test(r.cur)?r.cur:dispCur();
+          cards.push('<div class="prow"><b>'+esc(dmy(r.date))+'</b> · '+esc(cur.acc?(AM.get(cur.acc)||{}).name:(r.accName||'(conto predefinito)'))+'<br>'+esc(r.catName)+' → <b>'+(r.type==='exp'?'−':'+')+esc(money(r.amt,c))+'</b>'+(r.note?'<br><small>'+esc(r.note)+'</small>':'')+'</div>');
+        }else cards.push('<div class="prow bad">Riga non leggibile: '+esc(an.rows[i].join(' | '))+'</div>');
+      }
+    }
+    const fut=items.filter(r=>r.date>today);
+    q('#oFutBox').hidden=!fut.length;
+    const det=(fut.length&&cur.future==='rec')?detectRecs(items,today):[];
+    let futTxt='';
+    if(fut.length){
+      futTxt='<p class="note">Movimenti con data futura nel file: '+fut.length+' (di solito sono le ricorrenze di Monefy).'+
+        (cur.future==='rec'?' Ricorrenze riconosciute: '+det.length+'.':cur.future==='skip'?' Non verranno importati.':' Verranno importati come movimenti programmati.')+'</p>'+
+        (det.length?'<div class="raw">'+det.slice(0,14).map(g=>esc((g.first.note||g.first.catName)+' · '+recLabel({every:g.every,unit:'m'}))).join('<br>')+(det.length>14?'<br>…':'')+'</div>':'');
+    }
+    q('#iPv').innerHTML='<p class="hint">Riga 1 nel file (così com’è):</p><div class="raw">'+esc(an.rows[1].join(' | '))+'</div>'+
+      '<p class="hint">Come la leggo (prime 5 righe):</p>'+cards.join('')+futTxt+
+      (bad?'<p class="note">Righe che non riesco a leggere: '+bad+'.</p>':'')+
+      (map.date<0||map.amt<0?'<p class="err">Scegli almeno la colonna della data e quella dell’importo.</p>':'');
+    const n=items.length-(cur.future==='keep'?0:fut.length);
+    const go=q('#iDo');
+    go.textContent='Importa '+n+' movimenti'+(det.length?' e crea '+det.length+' ricorrenze':'');
+    go.disabled=!items.length;
+  }
+  box.addEventListener('change',upd);
+  q('#iDo').onclick=()=>{
+    read();
+    const r=importRows(an,map,cur);
+    box.innerHTML='';
+    out.innerHTML='<div class="res" role="status">Importati '+r.added+' movimenti ('+r.exp+' uscite, '+r.inc+' entrate).'+
+      (r.recs?'<br>Ricorrenze create: '+r.recs+'.':'')+
+      (r.future&&!r.recs?'<br>Movimenti futuri ignorati: '+r.future+'.':'')+
+      (r.skipped?'<br>Già presenti, saltati: '+r.skipped+'.':'')+
+      (r.bad?'<br>Righe non valide, ignorate: '+r.bad+'.':'')+
+      (r.newAcc?'<br>Nuovi conti: '+r.newAcc+'.':'')+
+      (r.newCat?'<br>Nuove categorie: '+r.newCat+'.':'')+
+      '<br>Il file di Monefy non contiene il saldo di partenza dei conti: in ☰ → Conti inserisci il saldo attuale e premi “Calcola”.</div>';
+    render();
+  };
+  upd();
+}
 function openImport(){
   openSheet('Importa dati',
-    '<p class="hint">Scegli il file CSV esportato da Monefy oppure un backup JSON di questa app. I movimenti già presenti non vengono duplicati.</p>'+
+    '<p class="hint">Scegli il file CSV esportato da Monefy oppure un backup JSON di questa app. Prima di importare vedrai un’anteprima di come viene letto il file.</p>'+
     '<label class="btn ghost" style="display:grid;place-items:center;cursor:pointer">Scegli un file<input class="vh" type="file" id="iFile" accept=".csv,.txt,.json,text/csv,application/json,text/plain"></label>'+
     '<p class="hint" id="iName"></p>'+
     '<label class="fld"><span>Oppure incolla il contenuto</span><textarea id="iText" rows="4" placeholder="data,conto,categoria,importo…"></textarea></label>'+
-    '<div class="actions"><button class="btn primary" id="iGo">Importa</button></div>'+
-    '<div id="iRes"></div>',
+    '<div class="actions"><button class="btn primary" id="iGo">Leggi il file</button></div>'+
+    '<div id="iPrev"></div><div id="iRes"></div>',
     (b)=>{
       const q=s=>b.querySelector(s);
       let fileText='';
@@ -1164,7 +1343,8 @@ function openImport(){
         fr.readAsText(f,'utf-8');
       };
       q('#iGo').onclick=async()=>{
-        const out=q('#iRes');
+        const out=q('#iRes'),prev=q('#iPrev');
+        out.innerHTML='';prev.innerHTML='';
         const text=(fileText||q('#iText').value).trim();
         const show=(m,bad)=>{out.innerHTML='<div class="res'+(bad?' bad':'')+'" role="status">'+m+'</div>';};
         if(!text)return show('Scegli un file o incolla il contenuto.',true);
@@ -1174,15 +1354,10 @@ function openImport(){
             if(!(await ask('Sostituire tutti i dati attuali con quelli del backup? Non si può annullare.','Sostituisci',true)))return;
             const n=restoreJson(o);
             show('Backup ripristinato: '+n+' movimenti.');
+            render();
           }else{
-            const r=importCsv(text);
-            show('Importati '+r.added+' movimenti ('+r.exp+' uscite, '+r.inc+' entrate).'+
-              (r.skipped?'<br>Già presenti, saltati: '+r.skipped+'.':'')+
-              (r.bad?'<br>Righe non valide, ignorate: '+r.bad+'.':'')+
-              (r.newAcc?'<br>Nuovi conti: '+r.newAcc+'.':'')+
-              (r.newCat?'<br>Nuove categorie: '+r.newCat+'.':''));
+            renderImportPreview(csvAnalyze(text),prev,out);
           }
-          render();
         }catch(e){show(esc(e.message||'Importazione non riuscita.'),true);}
       };
     });
@@ -1207,7 +1382,7 @@ function openMenu(){
     '<button data-m="json">Esporta backup JSON<small>per ripristinare</small></button>'+
     '<button data-m="theme">Tema<small id="themeName">'+THEME_NAMES[D.theme||'auto']+'</small></button>'+
     '<button data-m="reset" class="danger">Cancella tutti i dati</button></div>'+
-    '<p class="hint">I dati restano su questo dispositivo, nel browser. Ultimo export: '+last+'.</p>',
+    '<p class="hint">I dati restano su questo dispositivo, nel browser. Ultimo export: '+last+'.<br>Versione '+APP_VERSION+'.</p>',
     (b)=>{
       b.onclick=async e=>{
         const m=e.target.closest('[data-m]');if(!m)return;
@@ -1262,6 +1437,7 @@ $('#viewList').onclick=e=>{
 };
 
 applyTheme();
+$('#ver').textContent='Versione '+APP_VERSION;
 render();
 runRecurrences();
 document.addEventListener('visibilitychange',function(){if(!document.hidden)runRecurrences();});

@@ -80,10 +80,12 @@ main{padding:12px 16px 190px}
 .center{display:flex;justify-content:center}
 .donut{position:relative;width:min(300px,80vw);aspect-ratio:1;margin:14px auto 6px}
 .donut svg{width:100%;height:100%;display:block}
-.donut .mid{position:absolute;inset:0;display:grid;place-content:center;text-align:center;padding:0 22%}
-.mid .k{font-size:14px;color:var(--ink-2)}
-.mid .v{font-family:var(--f-display);font-weight:700;font-size:clamp(24px,8vw,34px);line-height:1.1;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
-.mid .v.exp{color:var(--exp)}.mid .v.inc{color:var(--inc)}
+.donut .mid{position:absolute;inset:0;display:grid;place-content:center;gap:6px;text-align:center;padding:0 20%}
+.mid .m{display:grid}
+.mid .k{font-size:12px;color:var(--ink-2);line-height:1.1}
+.mid .v{font-family:var(--f-display);font-weight:700;font-size:clamp(15px,4.6vw,19px);line-height:1.15;font-variant-numeric:tabular-nums}
+.mid .inc .v{color:var(--inc)}.mid .exp .v{color:var(--exp)}
+.mid .net .v{font-size:clamp(18px,5.6vw,23px)}
 .strip{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0 4px}
 .strip div{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px 12px}
 .strip small{display:block;color:var(--ink-2);font-size:13px}
@@ -161,6 +163,18 @@ textarea{resize:vertical}
 .amt.trf{color:var(--ink-2)}
 .seg.three button{padding:7px 12px}
 .link-btn{border:0;background:none;color:var(--accent);font-weight:600;padding:2px 8px;min-height:32px;border-radius:10px}
+.sec{display:flex;justify-content:space-between;align-items:baseline;margin:22px 0 4px;padding:9px 12px;border-radius:12px;font-weight:700;font-family:var(--f-display);font-size:17px}
+.sec.inc{background:var(--inc-soft);color:var(--inc)}
+.sec.exp{background:var(--exp-soft);color:var(--exp)}
+.sec.trf{background:var(--surface-2);color:var(--ink-2)}
+.empty.small{padding:12px}
+.chk{display:flex;align-items:center;gap:12px;min-height:48px;font-weight:600}
+.chk input{width:22px;height:22px;accent-color:var(--accent);flex:none}
+.sug{display:grid;margin-top:2px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--surface)}
+.sug button{border:0;border-bottom:1px solid var(--line);background:none;text-align:left;padding:12px;min-height:44px}
+.sug button:last-child{border-bottom:0}
+.stack{display:grid;gap:8px;margin-top:14px}
+.two2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 </style>
 </head>
 <body>
@@ -261,7 +275,7 @@ function seed(){
   const cats=[];
   E.forEach((c,i)=>cats.push({id:'e'+i,name:c[0],icon:c[1],color:PALETTE[i%PALETTE.length],type:'exp'}));
   I.forEach((c,i)=>cats.push({id:'i'+i,name:c[0],icon:c[1],color:PALETTE[(i+3)%PALETTE.length],type:'inc'}));
-  return {v:1,accounts:[{id:'a1',name:'Conto principale',cur:'EUR'}],cats:cats,tx:[],sel:'all',theme:'light',themeV:1,lastBackup:''};
+  return {v:1,accounts:[{id:'a1',name:'Conto principale',cur:'EUR'}],cats:cats,tx:[],sel:'all',theme:'light',themeV:1,rec:[],lastBackup:''};
 }
 let storageOk=true;
 function load(){
@@ -269,6 +283,7 @@ function load(){
     const r=localStorage.getItem(KEY);
     if(r){const o=JSON.parse(r);if(o&&Array.isArray(o.accounts)&&o.accounts.length&&Array.isArray(o.cats)&&Array.isArray(o.tx)){
       if(!o.themeV){o.themeV=1;if(!o.theme||o.theme==='auto')o.theme='light';}
+      if(!Array.isArray(o.rec))o.rec=[];
       return o;
     }}
   }catch(e){}
@@ -343,6 +358,59 @@ function effect(t,ids){
 }
 function accBalance(id){const ids=new Set([id]);let s=0;D.tx.forEach(t=>{s+=effect(t,ids);});return s;}
 
+const UNITS={d:['giorno','giorni'],w:['settimana','settimane'],m:['mese','mesi'],y:['anno','anni']};
+function recLabel(r){
+  if(r.every===1)return {d:'ogni giorno',w:'ogni settimana',m:'ogni mese',y:'ogni anno'}[r.unit];
+  return 'ogni '+r.every+' '+UNITS[r.unit][1];
+}
+function occDate(start,every,unit,k){
+  const a=fromIso(start),n=every*k;
+  if(unit==='d')return iso(new Date(a.getFullYear(),a.getMonth(),a.getDate()+n));
+  if(unit==='w')return iso(new Date(a.getFullYear(),a.getMonth(),a.getDate()+7*n));
+  const months=unit==='m'?n:12*n;
+  const t=new Date(a.getFullYear(),a.getMonth()+months,1);
+  const last=new Date(t.getFullYear(),t.getMonth()+1,0).getDate();
+  t.setDate(Math.min(a.getDate(),last));
+  return iso(t);
+}
+function skipToToday(r){
+  const today=iso(new Date());let g=0;
+  while(g++<5000&&occDate(r.start,r.every,r.unit,r.k)<today)r.k++;
+}
+function runRecurrences(quiet){
+  const today=iso(new Date());let made=0;
+  D.rec.forEach(r=>{
+    if(r.stopped)return;
+    let guard=0;
+    while(guard++<5000){
+      const dt=occDate(r.start,r.every,r.unit,r.k);
+      if(r.end&&dt>r.end){r.stopped=true;r.finished=true;break;}
+      if(dt>today)break;
+      D.tx.push(Object.assign({id:uid()},r.base,{date:dt,rid:r.id,occ:dt}));
+      r.k++;made++;
+    }
+  });
+  if(made){save();render();if(!quiet)toast('Aggiunti '+made+(made===1?' movimento ricorrente':' movimenti ricorrenti'));}
+  return made;
+}
+function openingCat(type){
+  let c=D.cats.find(x=>x.type===type&&x.name==='Saldo iniziale');
+  if(!c){c={id:uid(),name:'Saldo iniziale',icon:'🏁',color:'#8C9BAA',type:type};D.cats.push(c);idx();}
+  return c;
+}
+function choose(msg,labels){
+  return new Promise(res=>{
+    const sc=document.createElement('div');
+    sc.className='scrim top';
+    sc.innerHTML='<div class="sheet small" role="alertdialog" aria-modal="true"><p class="ask">'+esc(msg)+'</p><div class="stack">'+labels.map((l,i)=>'<button class="btn" data-i="'+i+'">'+esc(l)+'</button>').join('')+'<button class="btn ghost" data-i="-1">Annulla</button></div></div>';
+    sc.addEventListener('click',e=>{
+      const b=e.target.closest('[data-i]');
+      if(b||e.target===sc){sc.remove();res(b?+b.dataset.i:-1);}
+    });
+    document.body.appendChild(sc);
+  });
+}
+
 /* ---------- schermata principale ---------- */
 function renderHeader(){
   const sel=$('#accSel');
@@ -377,67 +445,68 @@ function renderSummary(){
   let inc=0,exp=0;const by=new Map();
   txs.forEach(t=>{
     if(t.type==='trf')return;
-    if(t.type==='inc')inc+=t.amt;else exp+=t.amt;
-    if(t.type===S.kind)by.set(t.cat,(by.get(t.cat)||0)+t.amt);
+    if(t.type==='inc')inc+=t.amt;
+    else{exp+=t.amt;by.set(t.cat,(by.get(t.cat)||0)+t.amt);}
   });
-  const total=S.kind==='exp'?exp:inc;
   const segs=[...by.entries()].map(e=>({c:CM.get(e[0]),v:e[1]})).filter(x=>x.c).sort((a,b)=>b.v-a.v);
   const net=inc-exp;
-  let h='<div class="center"><div class="seg" role="group" aria-label="Tipo di movimenti">'+
-    '<button data-kind="exp" aria-pressed="'+(S.kind==='exp')+'">Uscite</button>'+
-    '<button data-kind="inc" aria-pressed="'+(S.kind==='inc')+'">Entrate</button></div></div>';
-  h+='<div class="donut">'+donut(segs,total)+'<div class="mid"><span class="k">'+(S.kind==='exp'?'Uscite':'Entrate')+'</span><span class="v '+S.kind+'">'+esc(money(total,cur))+'</span></div></div>';
-  h+='<div class="strip"><div class="inc"><small>Entrate</small><b>'+esc(money(inc,cur))+'</b></div><div class="exp"><small>Uscite</small><b>'+esc(money(exp,cur))+'</b></div><div><small>Differenza</small><b>'+(net>0?'+':'')+esc(money(net,cur))+'</b></div></div>';
+  let h='<div class="donut">'+donut(segs,exp)+'<div class="mid">'+
+    '<div class="m inc"><span class="k">Entrate</span><span class="v">'+esc(money(inc,cur))+'</span></div>'+
+    '<div class="m exp"><span class="k">Uscite</span><span class="v">'+esc(money(exp,cur))+'</span></div>'+
+    '<div class="m net"><span class="k">Differenza</span><span class="v">'+(net>0?'+':'')+esc(money(net,cur))+'</span></div></div></div>';
   if(mixed())h+='<p class="note">Questi conti hanno valute diverse: gli importi sono sommati senza conversione. Scegli un solo conto per totali esatti.</p>';
   if(!segs.length){
-    h+='<div class="empty">'+(D.tx.length?'Nessun movimento in questo periodo.':'Ancora nessun movimento. Tocca − per aggiungere una spesa o + per un’entrata.')+'</div>';
+    h+='<div class="empty">'+(D.tx.length?'Nessuna uscita in questo periodo.':'Ancora nessun movimento. Tocca − per aggiungere una spesa o + per un’entrata.')+'</div>';
   }else{
-    h+='<div class="legend">'+segs.map(s=>'<button class="row" data-cat="'+esc(s.c.id)+'"><span class="ico" style="--c:'+esc(s.c.color)+'">'+esc(s.c.icon)+'</span><span class="grow"><b>'+esc(s.c.name)+'</b></span><span class="pct">'+pct(s.v,total)+'</span><span class="amt">'+esc(money(s.v,cur))+'</span></button>').join('')+'</div>';
+    h+='<p class="note">Uscite per categoria</p><div class="legend">'+segs.map(s=>'<button class="row" data-cat="'+esc(s.c.id)+'"><span class="ico" style="--c:'+esc(s.c.color)+'">'+esc(s.c.icon)+'</span><span class="grow"><b>'+esc(s.c.name)+'</b></span><span class="pct">'+pct(s.v,exp)+'</span><span class="amt">'+esc(money(s.v,cur))+'</span></button>').join('')+'</div>';
   }
   $('#viewSum').innerHTML=h;
+}
+function txRow(t,ids,cur){
+  const a=AM.get(t.acc);
+  const rm=(t.rid&&D.rec.some(r=>r.id===t.rid))?'↻ ':'';
+  if(t.type==='trf'){
+    const b=AM.get(t.acc2),e=effect(t,ids);
+    let amtTxt,cls='trf';
+    if(ids.size===1){amtTxt=(e>0?'+':'−')+money(Math.abs(e),cur);cls=e>0?'inc':'exp';}
+    else amtTxt=money(t.amt,a?a.cur:cur);
+    const sub=(rm+(t.note?'Trasferimento · ':'')+(a?a.name:'?')+' → '+(b?b.name:'?')).trim();
+    return '<button class="row" data-tx="'+esc(t.id)+'"><span class="ico" style="--c:#8C9BAA">⇄</span><span class="grow"><b>'+esc(t.note||'Trasferimento')+'</b><small>'+esc(sub)+'</small></span><span class="amt '+cls+'">'+esc(amtTxt)+'</span></button>';
+  }
+  const c=CM.get(t.cat)||{name:'Senza categoria',icon:'?',color:'#8C9BAA'};
+  const sub=(rm+[t.note?c.name:'',D.sel==='all'&&D.accounts.length>1&&a?a.name:''].filter(Boolean).join(' · ')).trim();
+  return '<button class="row" data-tx="'+esc(t.id)+'"><span class="ico" style="--c:'+esc(c.color)+'">'+esc(c.icon)+'</span><span class="grow"><b>'+esc(t.note||c.name)+'</b>'+(sub?'<small>'+esc(sub)+'</small>':'')+'</span><span class="amt '+t.type+'">'+(t.type==='exp'?'−':'+')+esc(money(t.amt,a?a.cur:cur))+'</span></button>';
 }
 function renderList(){
   const cur=dispCur();
   const ids=new Set(selAccs().map(a=>a.id));
   let txs=visibleTx();
   if(S.catFilter)txs=txs.filter(t=>t.cat===S.catFilter);
-  txs.sort((a,b)=>a.date<b.date?1:a.date>b.date?-1:(a.id<b.id?1:-1));
   let h='';
   if(S.catFilter&&CM.get(S.catFilter)){
     h+='<div class="filterchip">Categoria: '+esc(CM.get(S.catFilter).name)+'<button data-clearcat aria-label="Rimuovi il filtro">✕</button></div>';
   }
-  if(!txs.length){
-    $('#viewList').innerHTML=h+'<div class="empty">Nessun movimento in questo periodo.</div>';
-    return;
-  }
   const thisYear=new Date().getFullYear();
-  let lastDay='',net=0,shown=0;
-  const groups=[];
-  txs.slice(0,S.limit).forEach(t=>{
-    if(t.date!==lastDay){groups.push({date:t.date,items:[],net:0});lastDay=t.date;}
-    const g=groups[groups.length-1];g.items.push(t);g.net+=effect(t,ids);shown++;
-  });
-  groups.forEach(g=>{
-    const d=fromIso(g.date);
-    const opt={weekday:'short',day:'numeric',month:'long'};
-    if(d.getFullYear()!==thisYear)opt.year='numeric';
-    h+='<div class="day"><span>'+esc(d.toLocaleDateString('it-IT',opt))+'</span><span>'+(g.net>0?'+':'')+esc(money(g.net,cur))+'</span></div>';
-    g.items.forEach(t=>{
-      const a=AM.get(t.acc);
-      if(t.type==='trf'){
-        const b=AM.get(t.acc2),e=effect(t,ids);
-        let amtTxt,cls='trf';
-        if(ids.size===1){amtTxt=(e>0?'+':'−')+money(Math.abs(e),cur);cls=e>0?'inc':'exp';}
-        else amtTxt=money(t.amt,a?a.cur:cur);
-        h+='<button class="row" data-tx="'+esc(t.id)+'"><span class="ico" style="--c:#8C9BAA">⇄</span><span class="grow"><b>'+esc(t.note||'Trasferimento')+'</b><small>'+esc((t.note?'Trasferimento · ':'')+(a?a.name:'?')+' → '+(b?b.name:'?'))+'</small></span><span class="amt '+cls+'">'+esc(amtTxt)+'</span></button>';
-        return;
+  const secs=[['inc','Entrate','Nessuna entrata in questo periodo.'],['exp','Uscite','Nessuna uscita in questo periodo.'],['trf','Trasferimenti','']];
+  secs.forEach(sec=>{
+    const items=txs.filter(t=>t.type===sec[0]);
+    if(sec[0]==='trf'&&!items.length)return;
+    items.sort((a,b)=>a.date<b.date?1:a.date>b.date?-1:(a.id<b.id?1:-1));
+    let tot=0;items.forEach(t=>{tot+=Math.abs(effect(t,ids));});
+    h+='<div class="sec '+sec[0]+'"><span>'+sec[1]+'</span>'+(sec[0]==='trf'?'':'<span>'+(sec[0]==='inc'?'+':'−')+esc(money(tot,cur))+'</span>')+'</div>';
+    if(!items.length){h+='<div class="empty small">'+sec[2]+'</div>';return;}
+    let last='';
+    items.slice(0,S.limit).forEach(t=>{
+      if(t.date!==last){
+        const d=fromIso(t.date),opt={weekday:'short',day:'numeric',month:'long'};
+        if(d.getFullYear()!==thisYear)opt.year='numeric';
+        h+='<div class="day"><span>'+esc(d.toLocaleDateString('it-IT',opt))+'</span></div>';
+        last=t.date;
       }
-      const c=CM.get(t.cat)||{name:'Senza categoria',icon:'?',color:'#8C9BAA'};
-      const sub=[t.note?c.name:'',D.sel==='all'&&D.accounts.length>1&&a?a.name:''].filter(Boolean).join(' · ');
-      h+='<button class="row" data-tx="'+esc(t.id)+'"><span class="ico" style="--c:'+esc(c.color)+'">'+esc(c.icon)+'</span><span class="grow"><b>'+esc(t.note||c.name)+'</b>'+(sub?'<small>'+esc(sub)+'</small>':'')+'</span><span class="amt '+t.type+'">'+(t.type==='exp'?'−':'+')+esc(money(t.amt,a?a.cur:cur))+'</span></button>';
+      h+=txRow(t,ids,cur);
     });
+    if(items.length>S.limit)h+='<button class="btn more" data-more>Mostra altri ('+(items.length-S.limit)+')</button>';
   });
-  if(txs.length>shown)h+='<button class="btn more" data-more>Mostra altri movimenti ('+(txs.length-shown)+')</button>';
   $('#viewList').innerHTML=h;
 }
 function renderDock(){
@@ -504,15 +573,25 @@ function openTx(id,type){
   const T=ex?Object.assign({},ex):{type:type||'exp',cat:'',acc:defAcc,acc2:'',date:S.view.mode==='day'?S.view.anchor:iso(new Date()),note:''};
   const otherAcc=()=>(D.accounts.find(a=>a.id!==T.acc)||{}).id||'';
   if(T.type==='trf'&&(!T.acc2||T.acc2===T.acc))T.acc2=otherAcc();
+  const exRec=ex&&ex.rid?D.rec.find(r=>r.id===ex.rid):null;
+  const canRec=!(ex&&ex.opening);
+  const recHtml=!canRec?'':(exRec
+    ?'<p class="hint">↻ Questo movimento fa parte di una ricorrenza ('+esc(recLabel(exRec))+'). Per modificarla vai in Menu → Ricorrenze.</p>'
+    :'<div class="fld"><label class="chk"><input type="checkbox" id="fRec"><span>Ricorrente</span></label><div id="fRecOpts" hidden>'+
+      '<div class="two2"><label class="fld"><span>Ripeti ogni</span><input id="fEvery" type="number" min="1" max="999" inputmode="numeric" value="1"></label>'+
+      '<label class="fld"><span>Unità</span><select id="fUnit"><option value="d">giorni</option><option value="w">settimane</option><option value="m" selected>mesi</option><option value="y">anni</option></select></label></div>'+
+      '<label class="fld"><span>Fine</span><select id="fEndSel"><option value="">Senza fine</option><option value="date">Fino a una data</option></select></label>'+
+      '<label class="fld" id="fEndBox" hidden><span>Ultima data</span><input id="fEnd" type="date"></label></div></div>');
   const html=
     '<div class="seg three" id="tType" role="group" aria-label="Tipo"><button type="button" data-t="exp">Uscita</button><button type="button" data-t="inc">Entrata</button>'+(D.accounts.length>1?'<button type="button" data-t="trf">Trasferimento</button>':'')+'</div>'+
-    '<label class="fld"><span>Descrizione (facoltativa)</span><input id="fNote" type="text" maxlength="120" autocomplete="off"></label>'+
+    '<div class="fld"><label class="lbl" for="fNote">Descrizione (facoltativa)</label><input id="fNote" type="text" maxlength="120" autocomplete="off"><div class="sug" id="fSug" hidden></div></div>'+
     '<label class="fld"><span>Importo</span><div class="amt-in"><input id="fAmt" inputmode="decimal" autocomplete="off" placeholder="0,00"><span id="fCur"></span></div></label>'+
     '<label class="fld" id="fAmt2Box" hidden><span>Importo ricevuto</span><div class="amt-in"><input id="fAmt2" inputmode="decimal" autocomplete="off" placeholder="0,00"><span id="fCur2"></span></div></label>'+
     '<div class="fld" id="fCatBox"><span class="lbl">Categoria</span><div class="cgrid" id="fCats"></div></div>'+
     '<label class="fld" id="fAccBox"><span id="fAccLbl">Conto</span><select id="fAcc"></select></label>'+
     '<label class="fld" id="fAcc2Box" hidden><span>A</span><select id="fAcc2"></select></label>'+
     '<label class="fld"><span>Data</span><input id="fDate" type="date"></label>'+
+    recHtml+
     '<p class="err" id="fErr" role="alert" hidden></p>'+
     '<div class="actions">'+(ex?'<button type="button" class="btn danger" id="fDel">Elimina</button>':'')+'<button type="button" class="btn primary" id="fSave">Salva</button></div>';
   openSheet(ex?'Modifica movimento':'Nuovo movimento',html,(b,sc)=>{
@@ -524,6 +603,38 @@ function openTx(id,type){
     const opts=D.accounts.map(a=>'<option value="'+esc(a.id)+'">'+esc(a.name)+' ('+esc(a.cur)+')</option>').join('');
     q('#fAcc').innerHTML=opts;q('#fAcc2').innerHTML=opts;
     q('#fAcc').value=T.acc;if(T.acc2)q('#fAcc2').value=T.acc2;
+
+    /* suggerimenti per la descrizione (dopo almeno 3 caratteri) */
+    const descs=(()=>{
+      const m=new Map();
+      D.tx.forEach(t=>{
+        const x=(t.note||'').trim();if(!x)return;
+        const k=x.toLowerCase(),e=m.get(k)||{text:x,n:0,last:''};
+        e.n++;if(t.date>e.last){e.last=t.date;e.text=x;}
+        m.set(k,e);
+      });
+      return [...m.values()];
+    })();
+    const sug=q('#fSug');
+    function hideSug(){sug.innerHTML='';sug.hidden=true;}
+    function showSug(){
+      const v=q('#fNote').value.trim().toLowerCase();
+      if(v.length<3)return hideSug();
+      const list=descs.filter(e=>{const l=e.text.toLowerCase();return l!==v&&l.indexOf(v)>-1;})
+        .sort((a,c)=>{
+          const as=a.text.toLowerCase().indexOf(v)===0?0:1,cs=c.text.toLowerCase().indexOf(v)===0?0:1;
+          return as-cs||c.n-a.n||(a.last<c.last?1:-1);
+        }).slice(0,5);
+      if(!list.length)return hideSug();
+      sug.innerHTML=list.map(e=>'<button type="button" data-s="'+esc(e.text)+'">'+esc(e.text)+'</button>').join('');
+      sug.hidden=false;
+    }
+    q('#fNote').oninput=showSug;
+    sug.onclick=e=>{
+      const x=e.target.closest('[data-s]');if(!x)return;
+      q('#fNote').value=x.dataset.s;hideSug();q('#fAmt').focus();
+    };
+
     function layout(){
       const trf=T.type==='trf';
       q('#tType').querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',String(x.dataset.t===T.type)));
@@ -560,6 +671,11 @@ function openTx(id,type){
       if(T.acc2===T.acc){T.acc=otherAcc();q('#fAcc').value=T.acc;}
       layout();
     };
+    const recChk=q('#fRec');
+    if(recChk){
+      recChk.onchange=()=>{q('#fRecOpts').hidden=!recChk.checked;};
+      q('#fEndSel').onchange=()=>{q('#fEndBox').hidden=q('#fEndSel').value!=='date';};
+    }
     q('#fSave').onclick=()=>{
       const err=q('#fErr');
       const fail=m=>{err.textContent=m;err.hidden=false;};
@@ -568,6 +684,18 @@ function openTx(id,type){
       const date=q('#fDate').value;
       if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return fail('Scegli una data.');
       const note=q('#fNote').value.trim();
+      let recSpec=null;
+      if(recChk&&recChk.checked){
+        const every=parseInt(q('#fEvery').value,10);
+        if(!(every>=1))return fail('Indica ogni quanto si ripete (almeno 1).');
+        let end='';
+        if(q('#fEndSel').value==='date'){
+          end=q('#fEnd').value;
+          if(!/^\d{4}-\d{2}-\d{2}$/.test(end))return fail('Scegli l’ultima data della ricorrenza.');
+          if(end<date)return fail('L’ultima data deve essere uguale o successiva alla data del movimento.');
+        }
+        recSpec={every:every,unit:q('#fUnit').value,end:end};
+      }
       let rec;
       if(T.type==='trf'){
         if(!T.acc2||T.acc2===T.acc)return fail('Scegli due conti diversi.');
@@ -583,15 +711,30 @@ function openTx(id,type){
         rec={id:ex?ex.id:uid(),type:T.type,amt:Math.round(v*100),cat:T.cat,acc:T.acc,date:date,note:note};
       }
       if(ex){if(rec.type!=='trf'){delete ex.acc2;delete ex.amt2;}Object.assign(ex,rec);}else D.tx.push(rec);
+      if(recSpec){
+        const t0=ex||rec;
+        const base={type:t0.type,amt:t0.amt,cat:t0.cat,acc:t0.acc,note:t0.note};
+        if(t0.type==='trf'){base.acc2=t0.acc2;base.amt2=t0.amt2;}
+        const r={id:uid(),base:base,start:date,every:recSpec.every,unit:recSpec.unit,end:recSpec.end,k:1,stopped:false,finished:false};
+        D.rec.push(r);t0.rid=r.id;t0.occ=date;
+      }
       save();
-      const r=getRange(),out=date<r[0]||date>r[1];
+      const made=runRecurrences(true);
+      const r0=getRange(),out=date<r0[0]||date>r0[1];
       closeSheet(sc);
       const label=ex?'Movimento aggiornato':(T.type==='exp'?'Spesa salvata':T.type==='inc'?'Entrata salvata':'Trasferimento salvato');
-      toast(label+(out?' (fuori dal periodo mostrato)':''));
+      toast(label+(recSpec?' · ricorrente':'')+(made?' · aggiunti '+made+(made===1?' movimento':' movimenti')+' arretrati':'')+(out?' (fuori dal periodo mostrato)':''));
     };
     const del=q('#fDel');
     if(del)del.onclick=async()=>{
-      if(await ask('Eliminare questo movimento?','Elimina',true)){
+      const rr=ex.rid?D.rec.find(r=>r.id===ex.rid&&!r.stopped):null;
+      if(rr){
+        const i=await choose('Questo movimento fa parte di una ricorrenza ('+recLabel(rr)+'). Cosa vuoi fare?',['Elimina solo questo movimento','Elimina e ferma la ricorrenza']);
+        if(i<0)return;
+        D.tx=D.tx.filter(t=>t.id!==ex.id);
+        if(i===1)rr.stopped=true;
+        save();closeSheet(sc);toast(i===1?'Movimento eliminato e ricorrenza ferma':'Movimento eliminato');
+      }else if(await ask('Eliminare questo movimento?','Elimina',true)){
         D.tx=D.tx.filter(t=>t.id!==ex.id);save();closeSheet(sc);toast('Movimento eliminato');
       }
     };
@@ -615,22 +758,42 @@ function openAccounts(){
   });
 }
 function accForm(acc,after){
+  const ot=acc?D.tx.find(t=>t.opening&&t.acc===acc.id):null;
   openSheet(acc?'Modifica conto':'Nuovo conto',
     '<label class="fld"><span>Nome</span><input id="aName" maxlength="40" autocomplete="off"></label>'+
     '<label class="fld"><span>Valuta (codice di tre lettere, per esempio EUR)</span><input id="aCur" maxlength="3" autocapitalize="characters" autocomplete="off"></label>'+
+    '<label class="fld"><span>Saldo di partenza (facoltativo)</span><input id="aOpen" inputmode="decimal" autocomplete="off" placeholder="0,00"></label>'+
+    '<label class="fld"><span>Data di partenza</span><input id="aOpenDate" type="date"></label>'+
+    '<p class="hint">Il saldo di partenza viene registrato come entrata alla data indicata (come uscita se è negativo).</p>'+
     '<p class="err" id="aErr" role="alert" hidden></p>'+
     '<div class="actions">'+(acc&&D.accounts.length>1?'<button class="btn danger" id="aDel">Elimina</button>':'')+'<button class="btn primary" id="aSave">Salva</button></div>',
     (b,sc)=>{
       const q=s=>b.querySelector(s);
       q('#aName').value=acc?acc.name:'';
       q('#aCur').value=acc?acc.cur:(D.accounts[0]?D.accounts[0].cur:'EUR');
+      q('#aOpen').value=ot?((ot.type==='inc'?ot.amt:-ot.amt)/100).toFixed(2).replace('.',','):'';
+      q('#aOpenDate').value=ot?ot.date:iso(new Date());
       q('#aSave').onclick=()=>{
         const name=q('#aName').value.trim(),cur=q('#aCur').value.trim().toUpperCase();
         const err=q('#aErr');
-        if(!name){err.textContent='Scrivi un nome per il conto.';err.hidden=false;return;}
-        if(!/^[A-Z]{3}$/.test(cur)){err.textContent='La valuta deve avere tre lettere, per esempio EUR.';err.hidden=false;return;}
-        if(D.accounts.some(a=>a!==acc&&a.name.toLowerCase()===name.toLowerCase())){err.textContent='Esiste già un conto con questo nome.';err.hidden=false;return;}
-        if(acc){acc.name=name;acc.cur=cur;}else D.accounts.push({id:uid(),name:name,cur:cur});
+        const fail=m=>{err.textContent=m;err.hidden=false;};
+        if(!name)return fail('Scrivi un nome per il conto.');
+        if(!/^[A-Z]{3}$/.test(cur))return fail('La valuta deve avere tre lettere, per esempio EUR.');
+        if(D.accounts.some(a=>a!==acc&&a.name.toLowerCase()===name.toLowerCase()))return fail('Esiste già un conto con questo nome.');
+        const oStr=q('#aOpen').value.trim();
+        const oVal=oStr?parseAmount(oStr):0;
+        if(oStr&&!isFinite(oVal))return fail('Il saldo di partenza non è valido.');
+        const oDate=q('#aOpenDate').value;
+        if(oVal&&!/^\d{4}-\d{2}-\d{2}$/.test(oDate))return fail('Scegli la data di partenza.');
+        let target=acc;
+        if(acc){acc.name=name;acc.cur=cur;}
+        else{target={id:uid(),name:name,cur:cur};D.accounts.push(target);}
+        const cur0=D.tx.find(t=>t.opening&&t.acc===target.id);
+        if(oVal){
+          const type=oVal>0?'inc':'exp',cat=openingCat(type);
+          const rec={type:type,amt:Math.round(Math.abs(oVal)*100),cat:cat.id,acc:target.id,date:oDate,note:'',opening:true};
+          if(cur0)Object.assign(cur0,rec);else D.tx.push(Object.assign({id:uid()},rec));
+        }else if(cur0){D.tx=D.tx.filter(t=>t!==cur0);}
         save();closeSheet(sc);
       };
       const del=q('#aDel');
@@ -638,9 +801,95 @@ function accForm(acc,after){
         const n=D.tx.filter(t=>t.acc===acc.id||t.acc2===acc.id).length;
         if(await ask('Eliminare il conto “'+acc.name+'”'+(n?' e i suoi '+n+' movimenti':'')+'? Non si può annullare.','Elimina',true)){
           D.tx=D.tx.filter(t=>t.acc!==acc.id&&t.acc2!==acc.id);
+          D.rec=D.rec.filter(r=>r.base.acc!==acc.id&&r.base.acc2!==acc.id);
           D.accounts=D.accounts.filter(a=>a.id!==acc.id);
           if(D.sel===acc.id)D.sel='all';
           save();closeSheet(sc);
+        }
+      };
+    },after);
+}
+
+/* ---------- ricorrenze ---------- */
+function openRecs(){
+  openSheet('Ricorrenze','',(b)=>{
+    function draw(){
+      idx();
+      if(!D.rec.length){b.innerHTML='<div class="empty">Nessuna ricorrenza. Attivala con l’interruttore “Ricorrente” nel modulo di un movimento.</div>';return;}
+      b.innerHTML=D.rec.map(r=>{
+        const c=CM.get(r.base.cat),a=AM.get(r.base.acc);
+        const next=occDate(r.start,r.every,r.unit,r.k);
+        const state=r.finished?'terminata':r.stopped?'ferma':'prossima: '+dmy(next);
+        const trf=r.base.type==='trf';
+        const title=r.base.note||(trf?'Trasferimento':(c?c.name:'Senza categoria'));
+        const sign=r.base.type==='inc'?'+':r.base.type==='exp'?'−':'';
+        return '<button class="row" data-rec="'+esc(r.id)+'"><span class="ico" style="--c:'+esc(c?c.color:'#8C9BAA')+'">'+esc(trf?'⇄':(c?c.icon:'?'))+'</span><span class="grow"><b>'+esc(title)+'</b><small>'+esc(recLabel(r)+' · '+state)+'</small></span><span class="amt '+(trf?'trf':r.base.type)+'">'+sign+esc(money(r.base.amt,a?a.cur:'EUR'))+'</span></button>';
+      }).join('');
+    }
+    draw();
+    b.onclick=e=>{const x=e.target.closest('[data-rec]');if(x)recForm(D.rec.find(r=>r.id===x.dataset.rec),draw);};
+  });
+}
+function recForm(r,after){
+  if(!r)return;
+  const trf=r.base.type==='trf',from=AM.get(r.base.acc),to=AM.get(r.base.acc2),c=CM.get(r.base.cat);
+  const diff=trf&&from&&to&&from.cur!==to.cur;
+  const fmt=n=>(n/100).toFixed(2).replace('.',',');
+  openSheet('Modifica ricorrenza',
+    '<p class="hint">'+esc(trf?((from?from.name:'?')+' → '+(to?to.name:'?')):((c?c.name:'Senza categoria')+' · '+(from?from.name:'?')))+'. Conto e categoria non si cambiano: per farlo ferma questa ricorrenza e creane una nuova. Le modifiche valgono per le prossime scadenze.</p>'+
+    '<label class="fld"><span>Descrizione (facoltativa)</span><input id="rNote" maxlength="120" autocomplete="off"></label>'+
+    '<label class="fld"><span>Importo'+(from?' ('+esc(from.cur)+')':'')+'</span><input id="rAmt" inputmode="decimal" autocomplete="off"></label>'+
+    (diff?'<label class="fld"><span>Importo ricevuto ('+esc(to.cur)+')</span><input id="rAmt2" inputmode="decimal" autocomplete="off"></label>':'')+
+    '<div class="two2"><label class="fld"><span>Ripeti ogni</span><input id="rEvery" type="number" min="1" max="999" inputmode="numeric"></label>'+
+    '<label class="fld"><span>Unità</span><select id="rUnit"><option value="d">giorni</option><option value="w">settimane</option><option value="m">mesi</option><option value="y">anni</option></select></label></div>'+
+    '<label class="fld"><span>Fine</span><select id="rEndSel"><option value="">Senza fine</option><option value="date">Fino a una data</option></select></label>'+
+    '<label class="fld" id="rEndBox" hidden><span>Ultima data</span><input id="rEnd" type="date"></label>'+
+    '<p class="err" id="rErr" role="alert" hidden></p>'+
+    '<div class="stack"><button class="btn primary" id="rSave">Salva</button>'+
+    (r.finished?'':'<button class="btn" id="rToggle">'+(r.stopped?'Riattiva (riparte da oggi)':'Ferma la ricorrenza')+'</button>')+
+    '<button class="btn danger" id="rDel">Elimina la ricorrenza</button></div>',
+    (b,sc)=>{
+      const q=s=>b.querySelector(s);
+      q('#rNote').value=r.base.note||'';
+      q('#rAmt').value=fmt(r.base.amt);
+      if(diff)q('#rAmt2').value=fmt(r.base.amt2||r.base.amt);
+      q('#rEvery').value=r.every;q('#rUnit').value=r.unit;
+      q('#rEndSel').value=r.end?'date':'';q('#rEnd').value=r.end||'';
+      q('#rEndBox').hidden=!r.end;
+      q('#rEndSel').onchange=()=>{q('#rEndBox').hidden=q('#rEndSel').value!=='date';};
+      q('#rSave').onclick=()=>{
+        const err=q('#rErr');const fail=m=>{err.textContent=m;err.hidden=false;};
+        const v=parseAmount(q('#rAmt').value);
+        if(!(v>0))return fail('Inserisci un importo maggiore di zero.');
+        let v2=null;
+        if(diff){v2=parseAmount(q('#rAmt2').value);if(!(v2>0))return fail('Inserisci l’importo ricevuto.');}
+        const every=parseInt(q('#rEvery').value,10);
+        if(!(every>=1))return fail('Indica ogni quanto si ripete (almeno 1).');
+        let end='';
+        if(q('#rEndSel').value==='date'){
+          end=q('#rEnd').value;
+          if(!/^\d{4}-\d{2}-\d{2}$/.test(end))return fail('Scegli l’ultima data della ricorrenza.');
+        }
+        const unit=q('#rUnit').value;
+        if(every!==r.every||unit!==r.unit){
+          r.start=occDate(r.start,r.every,r.unit,r.k);r.k=0;
+        }
+        r.every=every;r.unit=unit;r.end=end;
+        r.base.note=q('#rNote').value.trim();
+        r.base.amt=Math.round(v*100);
+        if(trf)r.base.amt2=diff?Math.round(v2*100):r.base.amt;
+        if(r.finished&&(!r.end||occDate(r.start,r.every,r.unit,r.k)<=r.end)){r.stopped=false;r.finished=false;}
+        save();runRecurrences(true);closeSheet(sc);toast('Ricorrenza aggiornata');
+      };
+      const tg=q('#rToggle');
+      if(tg)tg.onclick=()=>{
+        if(r.stopped){r.stopped=false;r.finished=false;skipToToday(r);save();runRecurrences(true);toast('Ricorrenza riattivata');}
+        else{r.stopped=true;save();toast('Ricorrenza ferma');}
+        closeSheet(sc);
+      };
+      q('#rDel').onclick=async()=>{
+        if(await ask('Eliminare la ricorrenza? I movimenti già creati restano.','Elimina',true)){
+          D.rec=D.rec.filter(x=>x.id!==r.id);save();closeSheet(sc);toast('Ricorrenza eliminata');
         }
       };
     },after);
@@ -691,7 +940,7 @@ function catForm(cat,kind,after){
       };
       const del=q('#cDel');
       if(del)del.onclick=async()=>{
-        const n=D.tx.filter(t=>t.cat===cat.id).length;
+        const n=D.tx.filter(t=>t.cat===cat.id).length+D.rec.filter(r=>r.base.cat===cat.id).length;
         if(n){err_(q('#cErr'),'Questa categoria è usata da '+n+' movimenti: modificali prima di eliminarla.');return;}
         if(await ask('Eliminare la categoria “'+cat.name+'”?','Elimina',true)){
           D.cats=D.cats.filter(c=>c.id!==cat.id);save();closeSheet(sc);
@@ -733,7 +982,7 @@ function buildCsv(){
   return '\ufeff'+rows.join('\r\n');
 }
 function buildJson(){
-  return JSON.stringify({app:'spese',version:1,exportedAt:new Date().toISOString(),accounts:D.accounts,cats:D.cats,tx:D.tx},null,1);
+  return JSON.stringify({app:'spese',version:1,exportedAt:new Date().toISOString(),accounts:D.accounts,cats:D.cats,tx:D.tx,rec:D.rec},null,1);
 }
 async function exportFile(name,content){
   if(!D.tx.length){toast('Non ci sono ancora movimenti da esportare.');return;}
@@ -875,11 +1124,24 @@ function restoreJson(o){
   o.tx.forEach(t=>{
     if(!t||!/^\d{4}-\d{2}-\d{2}$/.test(t.date)||!Number.isInteger(t.amt)||t.amt<=0||!aIds.has(t.acc))return;
     const base={id:String(t.id||uid()),amt:t.amt,acc:t.acc,date:t.date,note:String(t.note||'')};
+    if(t.rid)base.rid=String(t.rid);
+    if(t.occ)base.occ=String(t.occ);
+    if(t.opening)base.opening=true;
     if((t.type==='exp'||t.type==='inc')&&cIds.has(t.cat))tx.push(Object.assign(base,{type:t.type,cat:t.cat}));
     else if(t.type==='trf'&&aIds.has(t.acc2)&&t.acc2!==t.acc&&Number.isInteger(t.amt2)&&t.amt2>0)tx.push(Object.assign(base,{type:'trf',cat:'',acc2:t.acc2,amt2:t.amt2}));
   });
+  const rec=[];
+  (Array.isArray(o.rec)?o.rec:[]).forEach(r=>{
+    const b=r&&r.base;
+    if(!b||!/^\d{4}-\d{2}-\d{2}$/.test(r.start)||!Number.isInteger(r.every)||r.every<1||['d','w','m','y'].indexOf(r.unit)<0||!aIds.has(b.acc)||!Number.isInteger(b.amt)||b.amt<=0)return;
+    const nb={type:b.type,amt:b.amt,acc:b.acc,note:String(b.note||'')};
+    if(b.type==='exp'||b.type==='inc'){if(!cIds.has(b.cat))return;nb.cat=b.cat;}
+    else if(b.type==='trf'){if(!aIds.has(b.acc2)||b.acc2===b.acc||!Number.isInteger(b.amt2)||b.amt2<=0)return;nb.cat='';nb.acc2=b.acc2;nb.amt2=b.amt2;}
+    else return;
+    rec.push({id:String(r.id||uid()),base:nb,start:r.start,every:r.every,unit:r.unit,end:/^\d{4}-\d{2}-\d{2}$/.test(r.end||'')?r.end:'',k:(Number.isInteger(r.k)&&r.k>=0)?r.k:0,stopped:!!r.stopped,finished:!!r.finished});
+  });
   if(!accs.length)throw new Error('Il backup non contiene conti validi.');
-  D.accounts=accs;D.cats=cats;D.tx=tx;D.sel='all';
+  D.accounts=accs;D.cats=cats;D.tx=tx;D.rec=rec;D.sel='all';
   save();idx();
   return tx.length;
 }
@@ -939,6 +1201,7 @@ function openMenu(){
     '<div class="menu">'+
     '<button data-m="accounts">Conti<small>'+D.accounts.length+'</small></button>'+
     '<button data-m="cats">Categorie<small>'+D.cats.length+'</small></button>'+
+    '<button data-m="recs">Ricorrenze<small>'+D.rec.filter(r=>!r.stopped).length+' attive</small></button>'+
     '<button data-m="import">Importa dati<small>Monefy o backup</small></button>'+
     '<button data-m="csv">Esporta CSV<small>per Excel e Fogli</small></button>'+
     '<button data-m="json">Esporta backup JSON<small>per ripristinare</small></button>'+
@@ -951,6 +1214,7 @@ function openMenu(){
         const k=m.dataset.m,today=iso(new Date());
         if(k==='accounts')openAccounts();
         else if(k==='cats')openCats();
+        else if(k==='recs')openRecs();
         else if(k==='import')openImport();
         else if(k==='csv')exportFile('spese_'+today+'.csv',buildCsv());
         else if(k==='json')exportFile('spese_backup_'+today+'.json',buildJson());
@@ -999,6 +1263,8 @@ $('#viewList').onclick=e=>{
 
 applyTheme();
 render();
+runRecurrences();
+document.addEventListener('visibilitychange',function(){if(!document.hidden)runRecurrences();});
 })();
 </script>
 </body>

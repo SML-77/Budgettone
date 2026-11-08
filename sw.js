@@ -1,5 +1,5 @@
-// Budgettone · VERSIONE 07/11/2026 20:52
-const CACHE='budgettone-20261107-2052';
+// Budgettone · VERSIONE 08/11/2026 22:15
+const CACHE='budgettone-20261108-2215';
 const CORE=['./','index.html','manifest.webmanifest','icon-192.png','icon-512.png'];
 self.addEventListener('install',e=>{
   e.waitUntil(caches.open(CACHE).then(c=>c.addAll(CORE)).then(()=>self.skipWaiting()));

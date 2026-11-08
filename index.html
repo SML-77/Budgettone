@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- Budgettone · VERSIONE 08/11/2026 22:15 -->
+<!-- Budgettone · VERSIONE 08/11/2026 23:14 -->
 <html lang="it">
 <head>
 <meta charset="utf-8">
@@ -167,6 +167,32 @@ textarea{resize:vertical}
 .ver{margin:0 0 8px;font-size:12px;color:var(--ink-2);text-align:right}
 .sheet-h .seg{flex:1;min-width:0;margin-right:10px}
 .sheet-h .seg button{padding:7px 8px;font-size:14px;white-space:nowrap;min-height:38px}
+.sheet.entry{padding:10px 14px calc(12px + env(safe-area-inset-bottom,0px))}
+.entry .sheet-h{margin-bottom:6px}
+.entry .sheet-h .icon-btn{width:40px;height:40px;border-radius:10px}
+.entry .sheet-h .seg button{min-height:34px}
+.entry .erow{margin:6px 0}
+.entry .datebtn,.entry .flagbtn{min-height:42px}
+.entry .abox{padding:6px 10px;margin:0 0 6px;min-height:0;gap:6px}
+.entry .accsel{flex:0 0 38%}
+.entry .accsel select{height:38px}
+.entry .adisp{font-size:clamp(30px,9vw,40px);padding:4px 0}
+.entry .aback{width:42px;height:38px}
+.entry .fld{margin:6px 0;gap:0}
+.entry .fld>.lbl{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.entry .fld input,.entry .fld select{min-height:40px;padding:6px 10px}
+.entry .tagbox{min-height:40px;padding:3px 6px}
+.entry .fld .tagbox input{min-height:32px;padding:0 4px}
+.entry .keys{gap:5px;margin:6px 0}
+.entry .key{min-height:42px;font-size:22px;border-radius:12px}
+.entry .bigbtn{min-height:48px}
+.entry .actions{margin-top:6px}
+.entry .sug button{min-height:38px;padding:8px 12px}
+.acur{font-family:var(--f-body);font-size:15px;font-weight:600;color:var(--ink-2);opacity:.55;margin-left:6px;align-self:center}
+.adisp.ph #eAmtTxt{opacity:.35}
+.cgrid.three{gap:6px}
+.cgrid.three .cbtn{min-height:62px;padding:6px 2px}
+.cgrid.three .ico{width:32px;height:32px;font-size:16px}
 .erow{display:flex;gap:8px;align-items:center;margin:12px 0 8px}
 .datebtn{position:relative;flex:1;min-width:0;display:flex;align-items:center;gap:8px;min-height:46px;border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:0 12px;font-weight:600;overflow:hidden;cursor:pointer}
 .datebtn span:last-of-type{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -179,11 +205,11 @@ textarea{resize:vertical}
 .accsel{display:grid;gap:2px;flex:0 0 36%;min-width:0}
 .accsel select{width:100%;height:38px;border-radius:10px;border:1px solid var(--line);background:var(--surface);padding:0 8px;font-weight:600;font-size:14px}
 .accsel small{color:var(--ink-2);font-weight:600;padding-left:4px}
-.adisp{flex:1;min-width:0;border:0;background:none;text-align:center;font-family:var(--f-display);font-weight:700;font-size:clamp(32px,10vw,46px);line-height:1;font-variant-numeric:tabular-nums;padding:8px 0;border-radius:10px;color:var(--ink);overflow:hidden;text-overflow:ellipsis}
+.adisp{display:flex;justify-content:center;align-items:baseline;flex:1;min-width:0;border:0;background:none;text-align:center;font-family:var(--f-display);font-weight:700;font-size:clamp(32px,10vw,46px);line-height:1;font-variant-numeric:tabular-nums;padding:8px 0;border-radius:10px;color:var(--ink);overflow:hidden;text-overflow:ellipsis}
 .abox.exp .adisp{color:var(--exp)}
 .abox.inc .adisp{color:var(--inc)}
 .adisp.on{outline:3px solid var(--accent)}
-.adisp.small{flex:none;width:100%;font-size:20px;text-align:left;padding:10px 12px;border:1px solid var(--line);background:var(--surface-2);margin-bottom:8px}
+.adisp.small{flex:none;width:100%;font-size:20px;text-align:left;justify-content:flex-start;gap:8px;padding:8px 12px;border:1px solid var(--line);background:var(--surface-2);margin-bottom:8px}
 .adisp.small small{font-family:var(--f-body);font-size:13px;font-weight:600;color:var(--ink-2)}
 .aback{flex:none;width:48px;height:44px;border-radius:12px;border:1px solid var(--line);background:var(--surface);font-size:20px}
 .keys{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}
@@ -277,7 +303,7 @@ if('serviceWorker' in navigator){
 
 /* ---------- utilità ---------- */
 const KEY='spese.v1';
-const APP_VERSION='08/11/2026 22:15';
+const APP_VERSION='08/11/2026 23:14';
 const PALETTE=['#5B8DEF','#E8A33D','#E5604D','#3FB59A','#A66BD9','#E26CA5','#6BBF59','#4FB3D9','#D9825B','#8C9BAA','#C2B73C','#3C7A89','#B5546B','#7A6CD9'];
 const $=s=>document.querySelector(s);
 const pad=n=>String(n).padStart(2,'0');
@@ -618,7 +644,7 @@ function allTags(ids){
   return [...m.values()];
 }
 function tagFieldHtml(p){
-  return '<div class="fld"><label class="lbl" for="'+p+'TagIn">Tag (facoltativi)</label><div class="tagbox"><span id="'+p+'TagChips"></span><input id="'+p+'TagIn" type="text" maxlength="30" autocomplete="off" enterkeyhint="done" placeholder="Aggiungi un tag, per esempio Islanda"></div><div class="sug" id="'+p+'TagSug" hidden></div></div>';
+  return '<div class="fld"><label class="lbl" for="'+p+'TagIn">Tag (facoltativi)</label><div class="tagbox"><span id="'+p+'TagChips"></span><input id="'+p+'TagIn" type="text" maxlength="30" autocomplete="off" enterkeyhint="done" placeholder="Tag (facoltativi), per esempio Islanda"></div><div class="sug" id="'+p+'TagSug" hidden></div></div>';
 }
 function makeTagInput(root,p,initial){
   const q=sel=>root.querySelector(sel);
@@ -812,12 +838,12 @@ function openTx(id,type){
     '<div class="seg three" id="tType" role="group" aria-label="Tipo"><button type="button" data-t="exp">Uscita</button><button type="button" data-t="inc">Entrata</button>'+(D.accounts.length>1?'<button type="button" data-t="trf">Trasferimento</button>':'')+'</div>'+
     '<div class="erow"><label class="datebtn"><span aria-hidden="true">📅</span><span id="eDateTxt"></span><input id="fDate" type="date" aria-label="Data"></label>'+
       (canRec?'<button type="button" class="flagbtn" id="eRec" aria-pressed="false"><span aria-hidden="true">↻</span> <span id="eRecTxt">Ricorrente</span></button>':'')+'</div>'+
-    '<div class="abox" id="eAbox"><label class="accsel"><span class="vh">Conto</span><select id="fAcc"></select><small id="fCur"></small></label>'+
-      '<button type="button" class="adisp" id="eAmt" aria-label="Importo"><span id="eAmtTxt">0</span></button>'+
+    '<div class="abox" id="eAbox"><label class="accsel"><span class="vh">Conto</span><select id="fAcc"></select></label>'+
+      '<button type="button" class="adisp" id="eAmt" aria-label="Importo"><span id="eAmtTxt">0</span><small class="acur" id="fCur"></small></button>'+
       '<button type="button" class="aback" id="eBack" aria-label="Cancella l’ultima cifra">⌫</button></div>'+
     '<div id="eTrf" hidden><label class="fld"><span>A (conto di destinazione)</span><select id="fAcc2"></select></label>'+
       '<button type="button" class="adisp small" id="eAmt2Box" hidden aria-label="Importo ricevuto"><small>Importo ricevuto</small> <span id="eAmt2Txt">0</span> <small id="fCur2"></small></button></div>'+
-    '<div class="fld"><label class="lbl" for="fNote">Descrizione (facoltativa)</label><input id="fNote" type="text" maxlength="120" autocomplete="off"><div class="sug" id="fSug" hidden></div></div>'+
+    '<div class="fld"><label class="lbl" for="fNote">Descrizione (facoltativa)</label><input id="fNote" type="text" maxlength="120" autocomplete="off" placeholder="Descrizione (facoltativa)"><div class="sug" id="fSug" hidden></div></div>'+
     tagFieldHtml('f')+
     '<div class="keys" id="eKeys">'+['1','2','3','4','5','6','7','8','9',',','0','del'].map(k=>'<button type="button" class="key" data-k="'+k+'" aria-label="'+(k==='del'?'Cancella':k===','?'Virgola':k)+'">'+(k==='del'?'⌫':k)+'</button>').join('')+'</div>'+
     '<p class="err" id="fErr" role="alert" hidden></p>'+
@@ -825,6 +851,7 @@ function openTx(id,type){
   openSheet(ex?'Modifica movimento':TITLES[T.type],html,(b,sc)=>{
     const q=s=>b.querySelector(s);
     const hdr=sc.querySelector('.sheet-h'),dlg=sc.querySelector('.sheet');
+    dlg.classList.add('entry');
     const typeSel=q('#tType');
     hdr.replaceChild(typeSel,hdr.querySelector('h2'));
     q('#fAcc').innerHTML=D.accounts.map(a=>'<option value="'+esc(a.id)+'">'+esc(a.name)+'</option>').join('');
@@ -835,13 +862,14 @@ function openTx(id,type){
     const clearErr=()=>{q('#fErr').hidden=true;};
 
     function drawDate(){
-      const d=fromIso(T.date),o={weekday:'long',day:'numeric',month:'long'};
+      const d=fromIso(T.date),o={weekday:'short',day:'numeric',month:'short'};
       if(d.getFullYear()!==new Date().getFullYear())o.year='numeric';
       const t=d.toLocaleDateString('it-IT',o);
       q('#eDateTxt').textContent=t.charAt(0).toUpperCase()+t.slice(1);
     }
     function drawAmt(){
       q('#eAmtTxt').textContent=T.amtStr||'0';
+      q('#eAmt').classList.toggle('ph',!T.amtStr);
       q('#eAmt2Txt').textContent=T.amt2Str||'0';
       const two=!q('#eAmt2Box').hidden;
       q('#eAmt').classList.toggle('on',two&&T.focus==='amt');
